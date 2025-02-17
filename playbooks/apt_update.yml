@@ -1,24 +1,25 @@
 ---
 - name: Update and upgrade APT packages
   hosts: all
-  become: yes
+  become: true
   tasks:
     - name: Update APT package cache
       ansible.builtin.apt:
-        update_cache: yes
+        update_cache: true
 
     - name: Upgrade installed packages
       ansible.builtin.apt:
-        upgrade: yes
+        upgrade: true
 
     - name: Autoremove unnecessary packages
       ansible.builtin.apt:
-        autoremove: yes
+        autoremove: true
 
     - name: Check if a reboot is required
       ansible.builtin.stat:
         path: /var/run/reboot-required
       register: reboot_required
+      changed_when: false
 
     - name: Notify if a reboot is required
       ansible.builtin.debug:

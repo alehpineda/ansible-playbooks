@@ -1,31 +1,30 @@
 ---
 - name: Ensure UFW is installed, enabled, and configured
   hosts: all
-  become: yes
+  become: true
   tasks:
-    - name: Check if UFW is installed
-      ansible.builtin.command: dpkg -l | grep ufw
-      register: ufw_installed
-      ignore_errors: true
-
-    - name: Install UFW if not present
+    - name: Install UFW
       ansible.builtin.apt:
         name: ufw
         state: present
-        update_cache: yes
-      when: ufw_installed.rc != 0
+        update_cache: true
 
     - name: Enable UFW if not enabled
-      ansible.builtin.shell: ufw status | grep -qw active || ufw --force enable
+      ansible.builtin.shell: |
+        set -o pipefail
+        ufw status | grep -qw active || ufw --force enable
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Allow SSH on port 22
+      community.general.ufw:
+        rule: allow
+        port: 22
+        proto: tcp
 
     - name: Allow SSH on port 4488
       community.general.ufw:
         rule: allow
         port: 4488
-        proto: tcp
-
-    - name: Deny SSH on port 22
-      community.general.ufw:
-        rule: allow
-        port: 22
         proto: tcp

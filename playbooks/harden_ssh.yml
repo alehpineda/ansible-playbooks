@@ -1,0 +1,43 @@
+---
+- name: Harden SSH configuration on kyrios
+  hosts: all
+  become: true
+  tasks:
+    - name: Update /etc/ssh/sshd_config with hardened settings
+      ansible.builtin.blockinfile:
+        path: /etc/ssh/sshd_config
+        backup: true
+        marker: "# {mark} ANSIBLE MANAGED BLOCK - SSH Hardening"
+        block: |
+          Port 4488
+          Protocol 2
+          PermitRootLogin no
+          PasswordAuthentication no
+          ChallengeResponseAuthentication no
+          PubkeyAuthentication yes
+          PermitEmptyPasswords no
+          X11Forwarding no
+          MaxAuthTries 3
+          AllowAgentForwarding no
+          AllowTcpForwarding no
+          LogLevel VERBOSE
+      notify: Restart SSH
+
+    - name: Deny SSH on port 22
+      community.general.ufw:
+        rule: deny
+        port: 22
+        proto: tcp
+
+
+  handlers:
+    - name: Reload and Restart SSH
+      block:
+        - name: Reload systemd daemon
+          ansible.builtin.systemd:
+            daemon_reload: true
+          become: true
+        - name: Restart SSH
+          ansible.builtin.service:
+            name: ssh
+            state: restarted
