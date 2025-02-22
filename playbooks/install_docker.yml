@@ -1,0 +1,125 @@
+---
+- name: Install Docker and Docker Compose on all hosts
+  hosts: all
+  become: true
+
+  vars:
+    # Skip Docker tasks on ARMv6 hosts (e.g., virtue, nadleeh)
+    skip_docker_armv6: "{{ ansible_architecture == 'armv6l' }}"
+
+  tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Install prerequisites for Docker
+      ansible.builtin.apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+        state: present
+
+    - name: Debug system details
+      ansible.builtin.debug:
+        msg: "Distribution: {{ ansible_distribution }}, Architecture: {{ ansible_architecture }}, Codename: {{ ansible_lsb.codename }}"
+
+    - name: Remove existing Docker repository entries
+      ansible.builtin.file:
+        path: "/etc/apt/sources.list.d/docker.list"
+        state: absent
+
+    - name: Remove any existing Docker GPG keys
+      ansible.builtin.shell:
+        cmd: "set -o pipefail && apt-key del $(apt-key list | grep -i docker | awk '{print $2}' | cut -d'/' -f2) || true"
+        executable: /bin/bash
+      register: remove_keys
+      changed_when: remove_keys.rc == 0 and 'deleted' in remove_keys.stdout
+      failed_when: false
+
+    - name: Download Docker’s official GPG key
+      ansible.builtin.get_url:
+        url: "https://download.docker.com/linux/{{ ansible_distribution | lower }}/gpg"
+        dest: "/tmp/docker.gpg"
+        mode: "0644"
+      when: not skip_docker_armv6
+
+    - name: Check if Docker GPG key is already present
+      ansible.builtin.shell:
+        cmd: "set -o pipefail && apt-key list | grep -q 'Docker'"
+        executable: /bin/bash
+      register: key_check
+      failed_when: false
+      changed_when: false
+      when: not skip_docker_armv6
+
+    - name: Add Docker’s GPG key to apt keyring
+      ansible.builtin.shell:
+        cmd: "set -o pipefail && cat /tmp/docker.gpg | apt-key add -"
+        executable: /bin/bash
+      when:
+        - not skip_docker_armv6
+        - key_check.rc != 0
+      register: add_key
+      changed_when: add_key.rc == 0
+
+    - name: Remove temporary GPG key file
+      ansible.builtin.file:
+        path: "/tmp/docker.gpg"
+        state: absent
+      when: not skip_docker_armv6
+
+    - name: Add Docker apt repository
+      ansible.builtin.apt_repository:
+        repo: >-
+          deb [arch={{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' if ansible_architecture == 'x86_64' else 'armhf' if ansible_architecture == 'armv7l' else ansible_architecture }}]
+          https://download.docker.com/linux/{{ ansible_distribution | lower }}
+          {{ ansible_lsb.codename }} stable
+        state: present
+        filename: "docker"
+        update_cache: true
+      when: not skip_docker_armv6
+
+    - name: Install Docker packages
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-ce-rootless-extras
+        state: present
+      when: not skip_docker_armv6
+
+    - name: Ensure Docker service is started and enabled
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+      when: not skip_docker_armv6
+
+    - name: Install Docker Compose plugin
+      ansible.builtin.apt:
+        name: docker-compose-plugin
+        state: present
+      when: not skip_docker_armv6
+
+    - name: Add user to docker group
+      ansible.builtin.user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: true
+      when: not skip_docker_armv6
+
+    - name: Validate Docker installation
+      ansible.builtin.command: docker --version
+      register: docker_version
+      changed_when: false
+      when: not skip_docker_armv6
+
+    - name: Display Docker version
+      ansible.builtin.debug:
+        msg: "Docker version: {{ docker_version.stdout }}"
+      when: not skip_docker_armv6
