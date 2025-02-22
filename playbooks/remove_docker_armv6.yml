@@ -1,0 +1,48 @@
+---
+- name: Undo Docker installation on virtue and nadleeh
+  hosts: virtue,nadleeh
+  become: true  # Run tasks with sudo privileges
+  tasks:
+    - name: Stop and disable Docker service
+      ansible.builtin.service:
+        name: docker
+        state: stopped
+        enabled: false
+      failed_when: false  # Won’t fail if the service is already stopped or missing
+
+    - name: Remove Docker packages
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-ce-rootless-extras
+        state: absent
+        purge: true  # Also remove configuration files
+      failed_when: false  # Won’t fail if packages are already uninstalled
+
+    - name: Remove Docker repository file
+      ansible.builtin.file:
+        path: "/etc/apt/sources.list.d/docker.list"
+        state: absent
+
+    - name: Remove Docker GPG key
+      ansible.builtin.shell:
+        cmd: "set -o pipefail && apt-key del $(apt-key list | grep -i docker | awk '{print $2}' | cut -d'/' -f2) || true"
+        executable: /bin/bash
+      register: remove_key
+      changed_when: remove_key.rc == 0
+      failed_when: false  # Won’t fail if no key is found
+
+    - name: Remove Docker data and configuration (optional)
+      ansible.builtin.file:
+        path: "/var/lib/docker"
+        state: absent
+      when: false  # Set to true if you want to delete all Docker data (e.g., containers, images)
+
+    - name: Remove user from docker group
+      ansible.builtin.user:
+        name: "{{ ansible_user }}"
+        groups: ""
+        append: false
+      failed_when: false  # Won’t fail if the user isn’t in the group
