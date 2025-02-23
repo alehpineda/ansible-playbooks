@@ -1,0 +1,143 @@
+---
+- name: Install Zsh, Starship with Tokyo Night preset, and set Zsh as default shell
+  hosts: local
+  become: true  # Required for package installation and shell changes
+  vars:
+    starship_config_dir: "/home/{{ ansible_user }}/.config"
+    starship_config_file: "{{ starship_config_dir }}/starship.toml"
+  tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Install Zsh
+      ansible.builtin.apt:
+        name: zsh
+        state: present
+
+    - name: Set Zsh as default shell for Ansible user
+      ansible.builtin.user:
+        name: "{{ ansible_user }}"
+        shell: /bin/zsh
+      when: ansible_user != 'root'
+
+    - name: Install dependencies (curl and fontconfig for Nerd Font)
+      ansible.builtin.apt:
+        name:
+          - curl
+          - fontconfig
+        state: present
+
+    - name: Create fonts directory for user
+      ansible.builtin.file:
+        path: "/home/{{ ansible_user }}/.local/share/fonts"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0755'
+
+    - name: Download FiraCode Nerd Font
+      ansible.builtin.get_url:
+        url: "https://github.com/ryanoasis/nerd-fonts/releases/download/v3.2.1/FiraCode.zip"
+        dest: "/tmp/FiraCode.zip"
+        mode: '0644'
+
+    - name: Install unzip if not present
+      ansible.builtin.apt:
+        name: unzip
+        state: present
+
+    - name: Unzip FiraCode Nerd Font
+      ansible.builtin.unarchive:
+        src: "/tmp/FiraCode.zip"
+        dest: "/home/{{ ansible_user }}/.local/share/fonts"
+        remote_src: true
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+      register: font_unzip
+      notify: Update font cache
+
+    - name: Remove temporary FiraCode.zip
+      ansible.builtin.file:
+        path: "/tmp/FiraCode.zip"
+        state: absent
+
+    - name: Check if Starship is already installed
+      ansible.builtin.stat:
+        path: "/usr/local/bin/starship"
+      register: starship_installed
+
+    - name: Download Starship install script
+      ansible.builtin.get_url:
+        url: "https://starship.rs/install.sh"
+        dest: "/tmp/starship_install.sh"
+        mode: '0755'
+      when: not starship_installed.stat.exists
+
+    - name: Install Starship
+      ansible.builtin.shell:
+        cmd: "/tmp/starship_install.sh -y"
+        executable: /bin/bash
+      when: not starship_installed.stat.exists
+      register: starship_install
+      changed_when: starship_install.rc == 0
+
+    - name: Remove temporary Starship install script
+      ansible.builtin.file:
+        path: "/tmp/starship_install.sh"
+        state: absent
+      when: not starship_installed.stat.exists
+
+    - name: Create Starship configuration directory
+      ansible.builtin.file:
+        path: "{{ starship_config_dir }}"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0755'
+      when: ansible_user != 'root'
+
+    - name: Apply Tokyo Night preset for Starship
+      ansible.builtin.shell:
+        cmd: "/usr/local/bin/starship preset tokyo-night -o {{ starship_config_file }}"
+        executable: /bin/bash
+      when: ansible_user != 'root'
+      register: starship_preset
+      changed_when: starship_preset.rc == 0
+
+    - name: Add Starship initialization to .zshrc
+      ansible.builtin.blockinfile:
+        path: "/home/{{ ansible_user }}/.zshrc"
+        create: true
+        mode: '0644'
+        marker: "# {mark} ANSIBLE MANAGED BLOCK - Starship"
+        block: |
+          eval "$(starship init zsh)"
+      when: ansible_user != 'root'
+
+    - name: Verify Zsh installation
+      ansible.builtin.command:
+        cmd: zsh --version
+      register: zsh_version
+      changed_when: false
+      failed_when: zsh_version.rc != 0
+
+    - name: Verify Starship installation
+      ansible.builtin.command:
+        cmd: starship --version
+      register: starship_version
+      changed_when: false
+      failed_when: starship_version.rc != 0
+
+    - name: Display Zsh and Starship versions
+      ansible.builtin.debug:
+        msg:
+          - "Zsh version: {{ zsh_version.stdout }}"
+          - "Starship version: {{ starship_version.stdout }}"
+
+  handlers:
+    - name: Update font cache
+      ansible.builtin.command:
+        cmd: fc-cache -fv
+      changed_when: false

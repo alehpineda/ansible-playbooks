@@ -1,0 +1,47 @@
+---
+- name: Install Mosh on all hosts
+  hosts: all
+  become: true  # Requires root privileges for package installation and firewall changes
+  tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600  # Cache valid for 1 hour to avoid unnecessary updates
+
+    - name: Install Mosh
+      ansible.builtin.apt:
+        name: mosh
+        state: present
+
+    - name: Check if UFW is installed
+      ansible.builtin.stat:
+        path: /etc/ufw/ufw.conf
+      register: ufw_installed
+
+    - name: Check UFW status if installed
+      ansible.builtin.command:
+        cmd: ufw status
+      register: ufw_status
+      when: ufw_installed.stat.exists
+      ignore_errors: true
+      changed_when: false  # Ensures no changes are reported for this task
+
+    - name: Allow Mosh UDP ports in UFW (60000-61000)
+      community.general.ufw:
+        rule: allow
+        port: "60000:61000"
+        proto: udp
+      when:
+        - ufw_installed.stat.exists
+        - "'Status: active' in ufw_status.stdout"
+
+    - name: Verify Mosh installation
+      ansible.builtin.command:
+        cmd: mosh --version
+      register: mosh_version
+      changed_when: false
+      failed_when: mosh_version.rc != 0  # Fail if Mosh isn’t installed correctly
+
+    - name: Display Mosh version
+      ansible.builtin.debug:
+        msg: "Mosh version installed: {{ mosh_version.stdout }}"
