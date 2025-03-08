@@ -1,6 +1,6 @@
 ---
 - name: Undo Docker installation on virtue and nadleeh
-  hosts: virtue,nadleeh
+  hosts: exia
   become: true  # Run tasks with sudo privileges
   tasks:
     - name: Stop and disable Docker service

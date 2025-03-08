@@ -1,6 +1,6 @@
 ---
 - name: Install Mosh on all hosts
-  hosts: all
+  hosts: test_boxes
   become: true  # Requires root privileges for package installation and firewall changes
   tasks:
     - name: Update apt cache

@@ -1,6 +1,6 @@
 ---
 - name: Ensure UFW is installed, enabled, and configured
-  hosts: all
+  hosts: test_boxes
   become: true
   tasks:
     - name: Install UFW
@@ -21,10 +21,4 @@
       community.general.ufw:
         rule: allow
         port: 22
-        proto: tcp
-
-    - name: Allow SSH on port 4488
-      community.general.ufw:
-        rule: allow
-        port: 4488
         proto: tcp

@@ -1,6 +1,6 @@
 ---
 - name: Install Zsh, Starship with Tokyo Night preset, and set Zsh as default shell
-  hosts: local
+  hosts: test_boxes
   become: true  # Required for package installation and shell changes
   vars:
     starship_config_dir: "/home/{{ ansible_user }}/.config"

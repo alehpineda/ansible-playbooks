@@ -1,6 +1,6 @@
 ---
-- name: Harden SSH configuration on kyrios
-  hosts: all
+- name: Harden SSH configuration
+  hosts: test_boxes
   become: true
   tasks:
     - name: Update /etc/ssh/sshd_config with hardened settings
@@ -23,12 +23,23 @@
           LogLevel VERBOSE
       notify: Restart SSH
 
+    - name: Allow SSH on port 4488
+      community.general.ufw:
+        rule: allow
+        port: 4488
+        proto: tcp
+
     - name: Deny SSH on port 22
       community.general.ufw:
         rule: deny
         port: 22
         proto: tcp
 
+    - name: Ensure SSH service is enabled and started
+      ansible.builtin.systemd:
+        name: ssh
+        enabled: true
+        state: started
 
   handlers:
     - name: Reload and Restart SSH

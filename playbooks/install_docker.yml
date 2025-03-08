@@ -1,6 +1,6 @@
 ---
 - name: Install Docker and Docker Compose on all hosts
-  hosts: all
+  hosts: test_boxes
   become: true
 
   vars:
