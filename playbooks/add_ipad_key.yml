@@ -1,0 +1,23 @@
+---
+- name: Add iPad SSH public key to servers
+  hosts: all
+  become: true
+  vars:
+    home_user: "your_username"
+    pub_key_file: "file.pub"
+    ipad_pub_key: "{{ lookup('file', '/home/{{ home_user }}/.ssh/{{ pub_key_file }}') }}"
+
+  tasks:
+    - name: Ensure SSH directory exists
+      ansible.builtin.file:
+        path: "/home/{{ ansible_user }}/.ssh"
+        state: directory
+        mode: '0700'
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+
+    - name: Add iPad public key to authorized_keys
+      ansible.posix.authorized_key:
+        user: "{{ ansible_user }}"
+        key: "{{ ipad_pub_key }}"
+        state: present

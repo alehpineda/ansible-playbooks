@@ -1,0 +1,27 @@
+---
+- name: Update Starship configuration with custom starship.toml
+  hosts: rpios, ubuntu_lts
+  become: true
+  vars:
+    starship_config_dir: "/home/{{ ansible_user }}/.config"
+    starship_config_file: "{{ starship_config_dir }}/starship.toml"
+    local_home: ""
+    local_starship_config: "{{ local_home }}/starship.toml"
+  tasks:
+    - name: Ensure Starship configuration directory exists
+      ansible.builtin.file:
+        path: "{{ starship_config_dir }}"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0755'
+      when: ansible_user != 'root'
+
+    - name: Copy custom starship.toml to remote host
+      ansible.builtin.copy:
+        src: local_starship_config
+        dest: "{{ starship_config_file }}"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0644'
+      when: ansible_user != 'root'
