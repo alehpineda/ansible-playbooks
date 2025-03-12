@@ -1,0 +1,57 @@
+---
+- name: Install and configure Tailscale with temp auth key
+  hosts: test_boxes  # Replace with your target hosts (e.g., "tailscale_nodes")
+  become: true  # Run as sudo
+  vars:
+    tailscale_authkey: ""  # Replace with your temp key
+    tailscale_repo_url: "https://pkgs.tailscale.com/stable/{{ ansible_distribution | lower }}/{{ ansible_distribution_release }}.noarmor.gpg"
+    tailscale_repo: "deb https://pkgs.tailscale.com/stable/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} main"
+  tasks:
+    - name: Check if Tailscale is installed and up
+      ansible.builtin.command:
+        cmd: "tailscale status"
+      register: tailscale_status
+      failed_when: false  # Don’t fail if Tailscale isn’t installed/running
+      changed_when: false  # This is just a check, not a change
+      check_mode: false  # Run even in check mode
+
+    - name: Set fact for Tailscale state
+      ansible.builtin.set_fact:
+        tailscale_already_up: "{{ tailscale_status.rc == 0 and 'Logged in' in tailscale_status.stdout }}"
+      when: tailscale_status.rc is defined
+
+    - name: Add Tailscale GPG key
+      ansible.builtin.apt_key:
+        url: "{{ tailscale_repo_url }}"
+        state: present
+      when: ansible_os_family == "Debian" and not tailscale_already_up | default(false)
+
+    - name: Add Tailscale repository
+      ansible.builtin.apt_repository:
+        repo: "{{ tailscale_repo }}"
+        state: present
+        filename: tailscale
+      when: ansible_os_family == "Debian" and not tailscale_already_up | default(false)
+
+    - name: Install Tailscale
+      ansible.builtin.apt:
+        name: tailscale
+        state: present
+        update_cache: true
+      when: ansible_os_family == "Debian" and not tailscale_already_up | default(false)
+
+    - name: Ensure Tailscale is up and authenticated
+      ansible.builtin.command:
+        cmd: "tailscale up --authkey={{ tailscale_authkey }}"
+        creates: "/var/lib/tailscale/tailscaled.state"  # Idempotency check
+      register: tailscale_up
+      changed_when: tailscale_up.rc == 0
+      failed_when: tailscale_up.rc != 0 and tailscale_up.rc != 2  # Ignore already-authenticated state
+      when: not tailscale_already_up | default(false)
+
+    - name: Ensure Tailscaled service is running
+      ansible.builtin.service:
+        name: tailscaled
+        state: started
+        enabled: true
+      when: not tailscale_already_up | default(false)
